@@ -27,6 +27,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.xiaohaoo.yolo.R
 import com.xiaohaoo.yolo.databinding.ActivityMainBinding
 import com.xiaohaoo.yolo.util.DetectorUtils
 import kotlinx.coroutines.Dispatchers
@@ -54,14 +55,16 @@ class MainActivity : AppCompatActivity() {
         Executors.newSingleThreadExecutor()
     }
 
-    private lateinit var interpreter: Interpreter;
+    private var interpreter: Interpreter? = null
 
     private val inputSize = Size(640, 640)
     private var imageSize = Size(720, 1280)
-    private lateinit var imageProcessor: ImageProcessor;
+    private lateinit var imageProcessor: ImageProcessor
 
     private lateinit var imageAnalysis: ImageAnalysis
     private lateinit var preview: Preview
+    private var cameraProvider: ProcessCameraProvider? = null
+    private var currentCameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
     private val orientationEventListener by lazy {
         object : OrientationEventListener(this) {
@@ -73,7 +76,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-
 
     private fun updateProcessParam() {
         val scaleFactor = Math.min(inputSize.width.toFloat() / imageSize.width.toFloat(), inputSize.height.toFloat() / imageSize.height.toFloat())
@@ -102,6 +104,123 @@ class MainActivity : AppCompatActivity() {
             }).add(NormalizeOp(0.0f, 255.0f)).add(CastOp(DataType.FLOAT32)).build()
     }
 
+    private fun loadModel(modelFileName: String) {
+        val model = FileUtil.loadMappedFile(this, modelFileName)
+        val options = Interpreter.Options().apply {
+            numThreads = Runtime.getRuntime().availableProcessors()
+        }
+        try {
+            options.addDelegate(GpuDelegate())
+            interpreter = Interpreter(model, options)
+            Log.d(TAG, "Interpreter created with GPU delegate for $modelFileName")
+        } catch (e: Exception) {
+            Log.w(TAG, "GPU delegate failed, falling back to CPU: ${e.message}")
+            val cpuOptions = Interpreter.Options().apply {
+                numThreads = Runtime.getRuntime().availableProcessors()
+            }
+            interpreter = Interpreter(model, cpuOptions)
+            Log.d(TAG, "Interpreter created with CPU only for $modelFileName")
+        }
+    }
+
+    private fun bindCamera() {
+        val cp = cameraProvider ?: return
+        val resolutionSelector = ResolutionSelector.Builder()
+            .setAspectRatioStrategy(AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY)
+            .setResolutionStrategy(ResolutionStrategy(inputSize, ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER)).build()
+
+        preview = Preview.Builder()
+            .setTargetRotation(binding.previewView.display.rotation)
+            .setResolutionSelector(resolutionSelector).build()
+            .also { it.setSurfaceProvider(binding.previewView.surfaceProvider) }
+
+        imageAnalysis = ImageAnalysis.Builder()
+            .setTargetRotation(binding.previewView.display.rotation)
+            .setResolutionSelector(resolutionSelector)
+            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
+            .also {
+                it.setAnalyzer(imageAnalysisExecutor) {
+                    val matrix = Matrix().apply { postRotate(it.imageInfo.rotationDegrees.toFloat()) }
+                    val bitmap = Bitmap.createBitmap(it.toBitmap(), 0, 0, it.width, it.height, matrix, true)
+                    it.close()
+                    if (bitmap.width != imageSize.width || bitmap.height != imageSize.height) {
+                        this.imageSize = Size(bitmap.width, bitmap.height)
+                        updateProcessParam()
+                    }
+                    Log.d(TAG, "Input Image: Size: ${bitmap.width} × ${bitmap.height} Format: ${bitmap.colorSpace}")
+                    val input = imageProcessor.process(TensorImage.fromBitmap(bitmap))
+                    val output = TensorBuffer.createFixedSize(intArrayOf(1, 84, 8400), DataType.FLOAT32)
+                    interpreter?.run(input.buffer, output.buffer)
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        val boundingBoxList = DetectorUtils.boundingBox(output.floatArray)
+                        runOnUiThread {
+                            binding.overlayView.event(inputSize, imageSize, boundingBoxList)
+                        }
+                    }
+                }
+            }
+        val useCaseGroup = UseCaseGroup.Builder().addUseCase(preview).addUseCase(imageAnalysis).setViewPort(binding.previewView.viewPort!!).build()
+        cp.unbindAll()
+        cp.bindToLifecycle(this, currentCameraSelector, useCaseGroup)
+    }
+
+    private fun setupSettings() {
+        // Default checked states
+        binding.cameraToggleGroup.check(R.id.btnBackCamera)
+        binding.modelToggleGroup.check(R.id.btnModelInt8)
+
+        // Camera toggle
+        binding.cameraToggleGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            currentCameraSelector = when (checkedId) {
+                R.id.btnFrontCamera -> CameraSelector.DEFAULT_FRONT_CAMERA
+                else -> CameraSelector.DEFAULT_BACK_CAMERA
+            }
+            cameraProvider?.let {
+                bindCamera()
+            }
+            Log.d(TAG, "Camera switched to: ${if (checkedId == R.id.btnFrontCamera) "front" else "back"}")
+        }
+
+        // Model toggle
+        binding.modelToggleGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            val modelFileName = when (checkedId) {
+                R.id.btnModelFloat16 -> "yolov8n_float16.tflite"
+                R.id.btnModelFloat32 -> "yolov8n_float32.tflite"
+                else -> "yolov8n_int8.tflite"
+            }
+            val dialog = MaterialAlertDialogBuilder(this)
+                .setTitle("提示")
+                .setMessage("模型加载中...")
+                .setCancelable(false)
+                .show()
+            lifecycleScope.launch(Dispatchers.IO) {
+                interpreter?.close()
+                loadModel(modelFileName)
+                runOnUiThread {
+                    dialog.hide()
+                }
+            }
+            Log.d(TAG, "Model switched to: $modelFileName")
+        }
+
+        // Confidence threshold slider
+        binding.confidenceSlider.addOnChangeListener { _, value, _ ->
+            DetectorUtils.CONFIDENCE_THRESHOLD = value
+            binding.confidenceValue.text = String.format("%.2f", value)
+            Log.d(TAG, "Confidence threshold: $value")
+        }
+
+        // IoU threshold slider
+        binding.iouSlider.addOnChangeListener { _, value, _ ->
+            DetectorUtils.IOU_THRESHOLD = value
+            binding.iouValue.text = String.format("%.2f", value)
+            Log.d(TAG, "IoU threshold: $value")
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -114,89 +233,39 @@ class MainActivity : AppCompatActivity() {
             requestPermissions(permissions.toTypedArray(), 0)
         }
         val dialog = MaterialAlertDialogBuilder(this@MainActivity).setTitle("提示").setMessage("模型加载中...").setCancelable(false).show()
-        val model = FileUtil.loadMappedFile(this@MainActivity, "yolov8n_int8.tflite")
-        val options = Interpreter.Options().apply {
-            numThreads = Runtime.getRuntime().availableProcessors()
-        }
-        try {
-            options.addDelegate(GpuDelegate())
-            interpreter = Interpreter(model, options)
-            Log.d(TAG, "Interpreter created with GPU delegate")
-        } catch (e: Exception) {
-            Log.w(TAG, "GPU delegate failed, falling back to CPU: ${e.message}")
-            val cpuOptions = Interpreter.Options().apply {
-                numThreads = Runtime.getRuntime().availableProcessors()
-            }
-            interpreter = Interpreter(model, cpuOptions)
-            Log.d(TAG, "Interpreter created with CPU only")
-        }
+        loadModel("yolov8n_int8.tflite")
         updateProcessParam()
         OverlayView.LABELS = FileUtil.loadLabels(this@MainActivity, "labels.txt")
-        for (i in 0 until interpreter.inputTensorCount) {
-            val tensor = interpreter.getInputTensor(i)
+        for (i in 0 until interpreter!!.inputTensorCount) {
+            val tensor = interpreter!!.getInputTensor(i)
             Log.d(TAG, "Input Tensor: Name: ${tensor.name()}, Shape: ${tensor.shape().contentToString()}, DataType: ${tensor.dataType()}")
         }
-        for (i in 0 until interpreter.outputTensorCount) {
-            val tensor = interpreter.getOutputTensor(i)
+        for (i in 0 until interpreter!!.outputTensorCount) {
+            val tensor = interpreter!!.getOutputTensor(i)
             Log.d(TAG, "Output Tensor: Name: ${tensor.name()}, Shape: ${tensor.shape().contentToString()}, DataType: ${tensor.dataType()}")
         }
         dialog.hide()
 
         val manager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
-        val characteristics = manager.getCameraCharacteristics("1")
+        val characteristics = manager.getCameraCharacteristics("0")
         val configMap = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
         val cameraPreviewSize = configMap?.getOutputSizes(SurfaceTexture::class.java)
         Log.d(TAG, "Camera Sizes: ${cameraPreviewSize.contentToString()} OutputFormats: ${configMap?.outputFormats.contentToString()}")
 
+        setupSettings()
+
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
         cameraProviderFuture.addListener({
-            val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
-            val resolutionSelector = ResolutionSelector.Builder()
-                .setAspectRatioStrategy(AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY)
-                .setResolutionStrategy(ResolutionStrategy(inputSize, ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER)).build()
-
-            preview = Preview.Builder()
-                .setTargetRotation(binding.previewView.display.rotation)
-                .setResolutionSelector(resolutionSelector).build()
-                .also { it.setSurfaceProvider(binding.previewView.surfaceProvider) }
-
-            imageAnalysis = ImageAnalysis.Builder()
-                .setTargetRotation(binding.previewView.display.rotation)
-                .setResolutionSelector(resolutionSelector)
-                .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
-                .also {
-                    it.setAnalyzer(imageAnalysisExecutor) {
-                        val matrix = Matrix().apply { postRotate(it.imageInfo.rotationDegrees.toFloat()) }
-                        val bitmap = Bitmap.createBitmap(it.toBitmap(), 0, 0, it.width, it.height, matrix, true)
-                        it.close()
-                        if (bitmap.width != imageSize.width || bitmap.height != imageSize.height) {
-                            this.imageSize = Size(bitmap.width, bitmap.height)
-                            updateProcessParam()
-                        }
-                        Log.d(TAG, "Input Image: Size: ${bitmap.width} × ${bitmap.height} Format: ${bitmap.colorSpace}")
-                        val input = imageProcessor.process(TensorImage.fromBitmap(bitmap))
-                        val output = TensorBuffer.createFixedSize(intArrayOf(1, 84, 8400), DataType.FLOAT32)
-                        interpreter.run(input.buffer, output.buffer)
-                        lifecycleScope.launch(Dispatchers.IO) {
-                            val boundingBoxList = DetectorUtils.boundingBox(output.floatArray)
-                            runOnUiThread {
-                                binding.overlayView.event(inputSize, imageSize, boundingBoxList)
-                            }
-                        }
-                    }
-                }
-            val useCaseGroup = UseCaseGroup.Builder().addUseCase(preview).addUseCase(imageAnalysis).setViewPort(binding.previewView.viewPort!!).build()
-            cameraProvider.unbindAll()
-            val camera = cameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, useCaseGroup)
+            cameraProvider = cameraProviderFuture.get()
+            bindCamera()
             orientationEventListener.enable()
         }, ContextCompat.getMainExecutor(this))
     }
 
-    override fun onStop() {
-        super.onStop()
+    override fun onDestroy() {
+        super.onDestroy()
         imageAnalysisExecutor.shutdown()
-        interpreter.close()
+        interpreter?.close()
         orientationEventListener.disable()
     }
 

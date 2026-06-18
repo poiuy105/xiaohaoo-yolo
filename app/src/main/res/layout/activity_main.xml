@@ -49,7 +49,7 @@
             android:orientation="vertical"
             android:padding="16dp"
             app:behavior_hideable="false"
-            app:behavior_peekHeight="32dp"
+            app:behavior_peekHeight="56dp"
             app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior">
 
             <androidx.appcompat.widget.LinearLayoutCompat
@@ -63,18 +63,186 @@
                     android:layout_gravity="center_horizontal"
                     android:src="@drawable/ic_minus" />
 
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="系统配置"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <!-- Camera Toggle -->
                 <androidx.appcompat.widget.LinearLayoutCompat
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp">
+                    android:layout_marginTop="16dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
                     <TextView
-                        android:layout_width="match_parent"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_gravity="start"
-                        android:text="系统配置"
-                        android:textSize="16sp" />
+                        android:layout_weight="1"
+                        android:text="摄像头"
+                        android:textSize="14sp" />
+
+                    <com.google.android.material.button.MaterialButtonToggleGroup
+                        android:id="@+id/cameraToggleGroup"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:singleSelection="true"
+                        app:selectionRequired="true">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnBackCamera"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="后摄"
+                            android:textSize="12sp"
+                            android:minWidth="0dp"
+                            android:paddingStart="12dp"
+                            android:paddingEnd="12dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnFrontCamera"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="前摄"
+                            android:textSize="12sp"
+                            android:minWidth="0dp"
+                            android:paddingStart="12dp"
+                            android:paddingEnd="12dp" />
+                    </com.google.android.material.button.MaterialButtonToggleGroup>
                 </androidx.appcompat.widget.LinearLayoutCompat>
+
+                <!-- Model Toggle -->
+                <androidx.appcompat.widget.LinearLayoutCompat
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="模型"
+                        android:textSize="14sp" />
+
+                    <com.google.android.material.button.MaterialButtonToggleGroup
+                        android:id="@+id/modelToggleGroup"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:singleSelection="true"
+                        app:selectionRequired="true">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnModelInt8"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="INT8"
+                            android:textSize="12sp"
+                            android:minWidth="0dp"
+                            android:paddingStart="10dp"
+                            android:paddingEnd="10dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnModelFloat16"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Float16"
+                            android:textSize="12sp"
+                            android:minWidth="0dp"
+                            android:paddingStart="10dp"
+                            android:paddingEnd="10dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnModelFloat32"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Float32"
+                            android:textSize="12sp"
+                            android:minWidth="0dp"
+                            android:paddingStart="10dp"
+                            android:paddingEnd="10dp" />
+                    </com.google.android.material.button.MaterialButtonToggleGroup>
+                </androidx.appcompat.widget.LinearLayoutCompat>
+
+                <!-- Confidence Threshold -->
+                <androidx.appcompat.widget.LinearLayoutCompat
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="置信度"
+                        android:textSize="14sp" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/confidenceSlider"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginEnd="8dp"
+                        android:valueFrom="0.05"
+                        android:valueTo="0.95"
+                        android:stepSize="0.05"
+                        android:value="0.30" />
+
+                    <TextView
+                        android:id="@+id/confidenceValue"
+                        android:layout_width="40dp"
+                        android:layout_height="wrap_content"
+                        android:text="0.30"
+                        android:textSize="14sp"
+                        android:gravity="end" />
+                </androidx.appcompat.widget.LinearLayoutCompat>
+
+                <!-- IoU Threshold -->
+                <androidx.appcompat.widget.LinearLayoutCompat
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="IoU"
+                        android:textSize="14sp" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/iouSlider"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginEnd="8dp"
+                        android:valueFrom="0.10"
+                        android:valueTo="0.95"
+                        android:stepSize="0.05"
+                        android:value="0.50" />
+
+                    <TextView
+                        android:id="@+id/iouValue"
+                        android:layout_width="40dp"
+                        android:layout_height="wrap_content"
+                        android:text="0.50"
+                        android:textSize="14sp"
+                        android:gravity="end" />
+                </androidx.appcompat.widget.LinearLayoutCompat>
+
             </androidx.appcompat.widget.LinearLayoutCompat>
         </androidx.core.widget.NestedScrollView>
     </androidx.coordinatorlayout.widget.CoordinatorLayout>

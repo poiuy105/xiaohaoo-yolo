@@ -5,8 +5,8 @@ class DetectorUtils {
 
         private const val NUM_ELEMENTS = 8400
         private const val NUM_CHANNELS = 84
-        private const val CONFIDENCE_THRESHOLD = 0.3F
-        private const val IOU_THRESHOLD = 0.5F
+        var CONFIDENCE_THRESHOLD = 0.3F
+        var IOU_THRESHOLD = 0.5F
 
         data class BoundingBox(
             val x1: Float,
