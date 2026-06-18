@@ -114,10 +114,22 @@ class MainActivity : AppCompatActivity() {
             requestPermissions(permissions.toTypedArray(), 0)
         }
         val dialog = MaterialAlertDialogBuilder(this@MainActivity).setTitle("提示").setMessage("模型加载中...").setCancelable(false).show()
-        interpreter = Interpreter(FileUtil.loadMappedFile(this@MainActivity, "yolov8n_int8.tflite"), Interpreter.Options().apply {
+        val model = FileUtil.loadMappedFile(this@MainActivity, "yolov8n_int8.tflite")
+        val options = Interpreter.Options().apply {
             numThreads = Runtime.getRuntime().availableProcessors()
-            addDelegate(GpuDelegate())
-        })
+        }
+        try {
+            options.addDelegate(GpuDelegate())
+            interpreter = Interpreter(model, options)
+            Log.d(TAG, "Interpreter created with GPU delegate")
+        } catch (e: Exception) {
+            Log.w(TAG, "GPU delegate failed, falling back to CPU: ${e.message}")
+            val cpuOptions = Interpreter.Options().apply {
+                numThreads = Runtime.getRuntime().availableProcessors()
+            }
+            interpreter = Interpreter(model, cpuOptions)
+            Log.d(TAG, "Interpreter created with CPU only")
+        }
         updateProcessParam()
         OverlayView.LABELS = FileUtil.loadLabels(this@MainActivity, "labels.txt")
         for (i in 0 until interpreter.inputTensorCount) {
