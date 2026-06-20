@@ -161,20 +161,26 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (previewSurfaceTexture != null) {
+        if (::camera2Manager.isInitialized && previewSurfaceTexture != null) {
             startCamera()
         }
     }
 
     override fun onPause() {
         super.onPause()
-        camera2Manager.closeCamera()
+        if (::camera2Manager.isInitialized) {
+            camera2Manager.closeCamera()
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        camera2Manager.release()
-        yuvPreprocessor.release()
+        if (::camera2Manager.isInitialized) {
+            camera2Manager.release()
+        }
+        if (::yuvPreprocessor.isInitialized) {
+            yuvPreprocessor.release()
+        }
         interpreter?.close()
         previewSurface?.release()
     }
