@@ -180,17 +180,13 @@ if(WIN32)
   set_target_properties( ${ly_lib_shared} PROPERTIES IMPORT_PREFIX "lib" )
 endif()
 
-# this creates the cpuid tool
-add_executable      ( cpuid ${ly_base_dir}/util/cpuid.c )
-target_link_libraries  ( cpuid ${ly_lib_static} )
-
-# this creates the conversion tool
-add_executable			( yuvconvert ${ly_base_dir}/util/yuvconvert.cc )
-target_link_libraries	( yuvconvert ${ly_lib_static} )
-
-# this creates the yuvconstants tool
-add_executable      ( yuvconstants ${ly_base_dir}/util/yuvconstants.c )
-target_link_libraries  ( yuvconstants ${ly_lib_static} )
+# Tools disabled for Android NDK build (util/ directory not included)
+#add_executable      ( cpuid ${ly_base_dir}/util/cpuid.c )
+#target_link_libraries  ( cpuid ${ly_lib_static} )
+#add_executable			( yuvconvert ${ly_base_dir}/util/yuvconvert.cc )
+#target_link_libraries	( yuvconvert ${ly_lib_static} )
+#add_executable      ( yuvconstants ${ly_base_dir}/util/yuvconstants.c )
+#target_link_libraries  ( yuvconstants ${ly_lib_static} )
 
 find_package ( JPEG )
 if (JPEG_FOUND)
