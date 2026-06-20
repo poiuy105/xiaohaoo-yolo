@@ -83,6 +83,7 @@ public:
                 yPlane, yRowStride,
                 uPlane, uvRowStride,
                 vPlane, uvRowStride,
+                uvPixelStride,
                 srcY, srcW,
                 srcU, srcW / 2,
                 srcV, srcW / 2,
