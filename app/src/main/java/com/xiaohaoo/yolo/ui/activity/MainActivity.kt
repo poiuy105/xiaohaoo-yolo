@@ -126,6 +126,14 @@ class MainActivity : AppCompatActivity() {
             if (surface != null && surface.isValid) {
                 camera2Manager.createCaptureSession(surface)
             }
+            // Reconfigure preview transform now that sensorOrientation is correct
+            runOnUiThread {
+                val viewW = binding.textureView.width
+                val viewH = binding.textureView.height
+                if (viewW > 0 && viewH > 0) {
+                    configureTransform(viewW, viewH)
+                }
+            }
         }
 
         // Setup TextureView
