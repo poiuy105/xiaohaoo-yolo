@@ -131,13 +131,9 @@ class MainActivity : AppCompatActivity() {
             if (surface != null && surface.isValid) {
                 camera2Manager.createCaptureSession(surface)
             }
-            // Reconfigure preview transform now that sensorOrientation is correct
+            // Reconfigure preview transform now that camera is open
             runOnUiThread {
-                val viewW = binding.textureView.width
-                val viewH = binding.textureView.height
-                if (viewW > 0 && viewH > 0) {
-                    configureTransform(viewW, viewH)
-                }
+                configureTransform(480, 640)
             }
         }
 
@@ -154,7 +150,7 @@ class MainActivity : AppCompatActivity() {
             override fun onSurfaceTextureSizeChanged(
                 surfaceTexture: SurfaceTexture, width: Int, height: Int
             ) {
-                configureTransform(width, height)
+                configureTransform(480, 640)
             }
 
             override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
@@ -217,11 +213,12 @@ class MainActivity : AppCompatActivity() {
     private fun startCamera() {
         val st = previewSurfaceTexture ?: return
 
-        // Configure SurfaceTexture size to match display
-        val displaySize = windowManager.currentWindowMetrics
-        val viewW = displaySize.bounds.width()
-        val viewH = displaySize.bounds.height()
-        st.setDefaultBufferSize(viewW, viewH)
+        // Set buffer to portrait dimensions (w<h).
+        // Camera2 renders the sensor output upright to match this aspect ratio,
+        // so no rotation transform is needed in the display matrix.
+        val portraitW = 480
+        val portraitH = 640
+        st.setDefaultBufferSize(portraitW, portraitH)
 
         previewSurface?.release()
         previewSurface = Surface(st)
@@ -233,82 +230,45 @@ class MainActivity : AppCompatActivity() {
         }
         camera2Manager.openCamera(facing)
 
-        // Configure preview transform after camera opens (sensor orientation known)
-        configureTransform(viewW, viewH)
+        // Configure transform now (no rotation needed, just fit-center scale)
+        configureTransform(portraitW, portraitH)
     }
 
     /**
-     * Configure TextureView transform matrix to properly display the camera preview.
-     * Accounts for sensor orientation, display rotation, aspect ratio, and front camera mirror.
+     * Configure TextureView transform matrix.
+     * Since the buffer is set to portrait dimensions, Camera2 renders it upright.
+     * We only need fit-center scaling and optional front-camera mirroring.
+     *
+     * @param bufWidth  buffer width (portrait: 480)
+     * @param bufHeight buffer height (portrait: 640)
      */
-    private fun configureTransform(viewWidth: Int, viewHeight: Int) {
+    private fun configureTransform(bufWidth: Int, bufHeight: Int) {
         val textureView = binding.textureView
-        if (viewWidth == 0 || viewHeight == 0) return
+        val viewW = textureView.width
+        val viewH = textureView.height
+        if (viewW == 0 || viewH == 0) return
 
-        val rotation = display?.rotation ?: 0
-        val sensorOrientation = camera2Manager.sensorOrientation
         val isFront = camera2Manager.isFrontCamera
+        val bw = bufWidth.toFloat()
+        val bh = bufHeight.toFloat()
 
-        // Camera buffer dimensions (landscape sensor output)
-        val bufW = viewWidth.toFloat()
-        val bufH = viewHeight.toFloat()
-
-        // Compute display rotation
-        val displayDegrees = when (rotation) {
-            Surface.ROTATION_0 -> 0
-            Surface.ROTATION_90 -> 90
-            Surface.ROTATION_180 -> 180
-            Surface.ROTATION_270 -> 270
-            else -> 0
-        }
-
-        // The preview image needs to be rotated to match the display orientation
-        val rotationAngle = if (isFront) {
-            (sensorOrientation + displayDegrees) % 360
-        } else {
-            (sensorOrientation - displayDegrees + 360) % 360
-        }
-
-        // After rotation, the effective dimensions swap for 90°/270° rotations
-        val rotatedW: Float
-        val rotatedH: Float
-        if (rotationAngle == 90 || rotationAngle == 270) {
-            rotatedW = bufH
-            rotatedH = bufW
-        } else {
-            rotatedW = bufW
-            rotatedH = bufH
-        }
+        // Fit-center: scale so the entire camera frame is visible (no cropping)
+        val scale = minOf(viewW / bw, viewH / bh)
 
         val matrix = Matrix()
-        val viewCenterX = viewWidth / 2f
-        val viewCenterY = viewHeight / 2f
+        val cx = viewW / 2f
+        val cy = viewH / 2f
 
-        // Step 1: Translate texture view center to origin
-        matrix.postTranslate(-viewCenterX, -viewCenterY)
-
-        // Step 2: Scale to match rotated camera image dimensions
-        val scaleX = rotatedW / viewWidth
-        val scaleY = rotatedH / viewHeight
-        matrix.postScale(scaleX, scaleY)
-
-        // Step 3: Rotate to compensate for sensor orientation vs display rotation
-        matrix.postRotate((360 - rotationAngle).toFloat())
-
-        // Step 4: Scale to fill the view while preserving aspect ratio
-        val fillScale = maxOf(
-            viewWidth / rotatedW,
-            viewHeight / rotatedH
-        )
-        matrix.postScale(fillScale, fillScale)
-
-        // Step 5: Front camera mirror
+        // 1. Move view center to origin
+        matrix.postTranslate(-cx, -cy)
+        // 2. Fit-center scale
+        matrix.postScale(scale, scale)
+        // 3. Front camera mirror (horizontal flip for natural selfie view)
         if (isFront) {
             matrix.postScale(-1f, 1f)
         }
-
-        // Step 6: Translate back to view center
-        matrix.postTranslate(viewCenterX, viewCenterY)
+        // 4. Translate back to view center
+        matrix.postTranslate(cx, cy)
 
         textureView.setTransform(matrix)
     }
