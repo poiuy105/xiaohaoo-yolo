@@ -350,7 +350,7 @@ class MainActivity : AppCompatActivity() {
 
         // Inference — normalize to float if model expects FLOAT32 input
         val inputBuffer = if (needsFloatInput) {
-            val srcBuf = yuvPreprocessor.tensorInputBuffer.buffer
+            val srcBuf = yuvPreprocessor.tensorInputBuffer
             val dstBuf = floatInputBuffer.buffer
             srcBuf.rewind()
             dstBuf.rewind()
