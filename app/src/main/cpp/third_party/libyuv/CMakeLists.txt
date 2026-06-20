@@ -237,12 +237,12 @@ if(UNIT_TEST)
 endif()
 
 
-# install the conversion tool, .so, .a, and all the header files
-install ( TARGETS yuvconvert DESTINATION bin )
-install ( TARGETS ${ly_lib_static}						DESTINATION lib )
-install ( TARGETS ${ly_lib_shared} LIBRARY DESTINATION lib RUNTIME DESTINATION bin ARCHIVE DESTINATION lib )
-install ( DIRECTORY ${PROJECT_SOURCE_DIR}/include/		DESTINATION include )
+# Install rules disabled for Android NDK build
+#install ( TARGETS yuvconvert DESTINATION bin )
+#install ( TARGETS ${ly_lib_static}						DESTINATION lib )
+#install ( TARGETS ${ly_lib_shared} LIBRARY DESTINATION lib RUNTIME DESTINATION bin ARCHIVE DESTINATION lib )
+#install ( DIRECTORY ${PROJECT_SOURCE_DIR}/include/		DESTINATION include )
 
 # create the .deb and .rpm packages using cpack
-include ( CM_linux_packages.cmake )
+#include ( CM_linux_packages.cmake )
 
