@@ -252,8 +252,8 @@ class MainActivity : AppCompatActivity() {
         val bw = bufWidth.toFloat()
         val bh = bufHeight.toFloat()
 
-        // Fit-center: scale so the entire camera frame is visible (no cropping)
-        val scale = minOf(viewW / bw, viewH / bh)
+        // Width-fill: preview always fills screen width, height keeps aspect ratio
+        val scale = viewW / bw
 
         val matrix = Matrix()
         val cx = viewW / 2f
