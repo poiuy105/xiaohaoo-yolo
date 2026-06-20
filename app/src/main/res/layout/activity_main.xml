@@ -14,11 +14,10 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
-        <androidx.camera.view.PreviewView
-            android:id="@+id/previewView"
+        <TextureView
+            android:id="@+id/textureView"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            app:scaleType="fillStart" />
+            android:layout_height="match_parent" />
 
         <com.xiaohaoo.yolo.ui.activity.OverlayView
             android:id="@+id/overlayView"
