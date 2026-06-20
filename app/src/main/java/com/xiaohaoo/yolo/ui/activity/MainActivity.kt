@@ -47,6 +47,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var yuvPreprocessor: YuvPreprocessor
     private var interpreter: Interpreter? = null
     private lateinit var outputBuffer: TensorBuffer
+    private lateinit var floatInputBuffer: TensorBuffer
+    private var needsFloatInput: Boolean = true
 
     // ---- State ----
     private var previewSurfaceTexture: SurfaceTexture? = null
@@ -90,9 +92,12 @@ class MainActivity : AppCompatActivity() {
         camera2Manager = Camera2Manager(this)
         camera2Manager.initImageReader()
 
-        // Pre-allocate inference output buffer (reused every frame)
+        // Pre-allocate inference buffers (reused every frame)
         outputBuffer = TensorBuffer.createFixedSize(
             intArrayOf(1, 84, 8400), DataType.FLOAT32
+        )
+        floatInputBuffer = TensorBuffer.createFixedSize(
+            intArrayOf(1, 640, 640, 3), DataType.FLOAT32
         )
 
         // Load labels
@@ -343,8 +348,22 @@ class MainActivity : AppCompatActivity() {
 
         if (!ok) return
 
-        // Inference
-        interpreter?.run(yuvPreprocessor.tensorInputBuffer, outputBuffer.buffer)
+        // Inference — normalize to float if model expects FLOAT32 input
+        val inputBuffer = if (needsFloatInput) {
+            val srcBuf = yuvPreprocessor.tensorInputBuffer.buffer
+            val dstBuf = floatInputBuffer.buffer
+            srcBuf.rewind()
+            dstBuf.rewind()
+            val floatArray = FloatArray(640 * 640 * 3)
+            for (i in floatArray.indices) {
+                floatArray[i] = (srcBuf.get(i).toInt() and 0xFF) / 255.0f
+            }
+            dstBuf.asFloatBuffer().put(floatArray)
+            floatInputBuffer.buffer
+        } else {
+            yuvPreprocessor.tensorInputBuffer
+        }
+        interpreter?.run(inputBuffer, outputBuffer.buffer)
 
         val t2 = SystemClock.elapsedRealtime()
         inferenceMs = t2 - t1
@@ -408,6 +427,7 @@ class MainActivity : AppCompatActivity() {
                 interpreter = Interpreter(modelFile, options)
                 activeDelegate = DelegateType.NNAPI
                 Log.d(TAG, "✓ NNAPI delegate active (Hexagon DSP) for $modelFileName")
+                detectInputType()
                 return
             } catch (e: Exception) {
                 Log.w(TAG, "NNAPI failed: ${e.message}, trying GPU...")
@@ -424,6 +444,7 @@ class MainActivity : AppCompatActivity() {
             interpreter = Interpreter(modelFile, options)
             activeDelegate = DelegateType.GPU
             Log.d(TAG, "✓ GPU delegate active for $modelFileName")
+            detectInputType()
             return
         } catch (e: Exception) {
             Log.w(TAG, "GPU delegate failed: ${e.message}, falling back to CPU")
@@ -437,6 +458,17 @@ class MainActivity : AppCompatActivity() {
         interpreter = Interpreter(modelFile, cpuOptions)
         activeDelegate = DelegateType.CPU
         Log.d(TAG, "✓ CPU fallback for $modelFileName")
+        detectInputType()
+    }
+
+    /**
+     * Detect model input tensor type. Some "int8" models still use FLOAT32 input.
+     */
+    private fun detectInputType() {
+        val interp = interpreter ?: return
+        val inputType = interp.getInputTensor(0).dataType()
+        needsFloatInput = (inputType == DataType.FLOAT32)
+        Log.d(TAG, "Model input type: $inputType, needsFloatInput=$needsFloatInput")
     }
 
     // ---- Settings UI ----
